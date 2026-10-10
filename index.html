@@ -215,7 +215,7 @@ function periodLabel(r){
 }
 
 /* ============ UI-СОСТОЯНИЕ ============ */
-const UI={tab:'home',stat:{type:'month',off:0,cur:'RUB',cs:null,ce:null},opFilter:'all'};
+const UI={tab:'home',stat:{type:'month',off:0,cur:'RUB',cs:null,ce:null},opFilter:'all',statDrill:null};
 
 /* ============ КОМПОНЕНТЫ ============ */
 function txTitle(t){
@@ -293,14 +293,17 @@ function vOps(){
 }
 function vStats(){
   const r=periodRange(),cur=UI.stat;
-  let inc=0,exp=0;const byCat={};
+  if(UI.statDrill)return vCatDrill(r,cur);
+  let inc=0,exp=0;const byCat={},byCatI={};
   for(const t of S.txs){
     if(t.date<r[0]||t.date>r[1])continue;
     const a=accById(t.acc);if(!a||a.cur!==cur.cur)continue;
-    if(t.type==='income')inc+=t.amount;else if(t.type==='expense'){exp+=t.amount;const k=t.cat||'none';byCat[k]=(byCat[k]||0)+t.amount;}
+    if(t.type==='income'){inc+=t.amount;const k=t.cat||'none';byCatI[k]=(byCatI[k]||0)+t.amount;}
+    else if(t.type==='expense'){exp+=t.amount;const k=t.cat||'none';byCat[k]=(byCat[k]||0)+t.amount;}
   }
   inc=round2(inc);exp=round2(exp);
   const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]),max=cats.length?cats[0][1]:1;
+  const catsI=Object.entries(byCatI).sort((a,b)=>b[1]-a[1]),maxI=catsI.length?catsI[0][1]:1;
   let h='<h2>Статистика</h2><div class="chips">'+
     ['week','month','quarter','year','custom'].map(p=>'<button class="chip'+(cur.type===p?' on':'')+'" data-act="st-type" data-v="'+p+'">'+(p==='week'?'Неделя':p==='month'?'Месяц':p==='quarter'?'Квартал':p==='year'?'Год':'Свой')+'</button>').join('')+'</div>';
   h+='<div class="chips">'+['RUB','USD','EUR'].map(c=>'<button class="chip'+(cur.cur===c?' on':'')+'" data-act="st-cur" data-v="'+c+'">'+CUR[c].sym+'</button>').join('')+'</div>';
@@ -309,9 +312,36 @@ function vStats(){
   h+='<div class="hr"></div><div class="kv"><span>Доход</span><b class="pos">+'+fmt(inc,cur.cur)+'</b></div><div class="kv"><span>Расход</span><b class="neg">−'+fmt(exp,cur.cur)+'</b></div><div class="kv"><span>Итог</span><b class="'+(inc-exp>=0?'pos':'neg')+'">'+(inc-exp>=0?'+':'−')+fmt(Math.abs(round2(inc-exp)),cur.cur)+'</b></div></div>';
   if(cats.length){h+='<div class="sect">Расходы по категориям</div><div class="card">';
     for(const[k,v]of cats){const c=catById(k),pc=Math.round(v/exp*100);
-      h+='<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div class="row between"><span>'+(c?c.icon+' '+esc(c.name):'📦 Прочее')+'</span><span><b>'+fmt(v,cur.cur)+'</b> <span class="muted small">'+pc+'%</span></span></div><div class="bar"><i style="width:'+Math.round(v/max*100)+'%"></i></div></div>';}
+      h+='<div data-act="st-cat" data-t="expense" data-k="'+k+'" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer"><div class="row between"><span>'+(c?c.icon+' '+esc(c.name):'📦 Прочее')+'</span><span><b>'+fmt(v,cur.cur)+'</b> <span class="muted small">'+pc+'%</span> <span class="muted">›</span></span></div><div class="bar"><i style="width:'+Math.round(v/max*100)+'%"></i></div></div>';}
     h+='</div>';}
   else h+='<div class="empty">В этом периоде нет расходов в '+CUR[cur.cur].sym+'.</div>';
+  if(catsI.length){h+='<div class="sect">Доходы по категориям</div><div class="card">';
+    for(const[k,v]of catsI){const c=catById(k),pc=Math.round(v/inc*100);
+      h+='<div data-act="st-cat" data-t="income" data-k="'+k+'" style="padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer"><div class="row between"><span>'+(c?c.icon+' '+esc(c.name):'💰 Без категории')+'</span><span><b class="pos">+'+fmt(v,cur.cur)+'</b> <span class="muted small">'+pc+'%</span> <span class="muted">›</span></span></div><div class="bar"><i style="width:'+Math.round(v/maxI*100)+'%"></i></div></div>';}
+    h+='</div>';}
+  return h;
+}
+function vCatDrill(r,cur){
+  const d=UI.statDrill,isInc=d.t==='income';
+  const c=d.k==='none'?null:catById(d.k);
+  const title=c?c.icon+' '+esc(c.name):(d.k==='none'?(isInc?'💰 Без категории':'📦 Прочее'):'🗑 Категория удалена');
+  const list=S.txs.filter(t=>t.type===d.t&&t.date>=r[0]&&t.date<=r[1]&&(d.k==='none'?!t.cat:t.cat===d.k)&&accById(t.acc)&&accById(t.acc).cur===cur.cur)
+    .sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:(a.id<b.id?1:-1));
+  const tot=round2(list.reduce((s,t)=>s+t.amount,0));
+  const n=list.length,w=n%10===1&&n%100!==11?'операция':(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?'операции':'операций');
+  let h='<h2>Статистика</h2><div class="card"><div class="row between"><button class="btn gray sm" data-act="st-back">‹ Назад</button><span class="small muted">'+periodLabel(r)+'</span></div>'+
+   '<div class="hr"></div><div class="row between"><b style="font-size:15px">'+title+'</b><b class="'+(isInc?'pos':'neg')+'" style="font-size:16px">'+(isInc?'+':'−')+fmt(tot,cur.cur)+'</b></div>'+
+   '<div class="small muted" style="margin-top:4px">'+n+' '+w+' за период</div></div>';
+  if(!list.length)return h+'<div class="empty">Нет операций за период.</div>';
+  h+='<div class="sect">Операции</div>';
+  for(const t of list){
+    const a=accById(t.acc);
+    h+='<div class="titem" data-act="tx-edit" data-id="'+t.id+'">'+
+      '<div class="tico">'+txIcon(t)+'</div>'+
+      '<div class="tt"><div class="n">'+dateLabel(t.date)+(t.comment?' <span class="muted small">· '+esc(t.comment)+'</span>':'')+'</div>'+
+      '<div class="small muted">'+esc(a?a.name:'—')+'</div></div>'+
+      '<div class="amt '+(isInc?'pos':'neg')+'">'+(isInc?'+':'−')+fmt(t.amount,cur.cur)+'</div></div>';
+  }
   return h;
 }
 function vAccs(){
@@ -346,7 +376,7 @@ function vMore(){
     '<button class="btn sm gray" data-act="exp-backup">💾 Экспорт бэкапа (JSON)</button>'+
     '<button class="btn sm gray" data-act="exp-csv">📄 Экспорт операций (CSV)</button>'+
     '<label class="btn sm gray" style="cursor:pointer">📥 Импорт бэкапа<input type="file" id="imp" accept=".json,application/json" style="display:none"></label></div>';
-  h+='<div class="sect">О приложении</div><div class="card small muted">Личный финансовый трекер. Версия 1.3. Все данные хранятся только на этом устройстве. Проценты начисляются автоматически в выбранный для каждого счёта день месяца при открытии приложения.</div>';
+  h+='<div class="sect">О приложении</div><div class="card small muted">Личный финансовый трекер. Версия 1.4. Все данные хранятся только на этом устройстве. Проценты начисляются автоматически в выбранный для каждого счёта день месяца при открытии приложения.</div>';
   return h;
 }
 
@@ -510,10 +540,12 @@ const ACT={
   'tx-add':(id,el)=>txForm(el.dataset.v),
   'tx-edit':id=>{const t=S.txs.find(x=>x.id===id);if(t)txForm(null,t);},
   'op-filter':(id,el)=>{UI.opFilter=el.dataset.v;render();},
-  'st-type':(id,el)=>{UI.stat.type=el.dataset.v;UI.stat.off=0;render();},
-  'st-cur':(id,el)=>{UI.stat.cur=el.dataset.v;render();},
-  'st-nav':(id,el)=>{UI.stat.off+=+el.dataset.v;render();},
-  'st-apply':()=>{const cs=$('#cs'),ce=$('#ce');if(cs&&ce&&cs.value&&ce.value){UI.stat.cs=cs.value;UI.stat.ce=ce.value;render();}},
+  'st-type':(id,el)=>{UI.stat.type=el.dataset.v;UI.stat.off=0;UI.statDrill=null;render();},
+  'st-cur':(id,el)=>{UI.stat.cur=el.dataset.v;UI.statDrill=null;render();},
+  'st-nav':(id,el)=>{UI.stat.off+=+el.dataset.v;UI.statDrill=null;render();},
+  'st-apply':()=>{const cs=$('#cs'),ce=$('#ce');if(cs&&ce&&cs.value&&ce.value){UI.stat.cs=cs.value;UI.stat.ce=ce.value;UI.statDrill=null;render();}},
+  'st-cat':(id,el)=>{UI.statDrill={t:el.dataset.t,k:el.dataset.k};render();},
+  'st-back':()=>{UI.statDrill=null;render();},
   'acc-add':()=>accForm(),
   'acc-open':id=>{const a=accById(id);if(a)accDetail(a);},
   'cat-add':()=>catForm(),
@@ -568,7 +600,7 @@ document.addEventListener('change',e=>{
   }
 });
 render();
-if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+if(typeof navigator!=='undefined'&&'serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
 </script>
 </body>
 </html>
