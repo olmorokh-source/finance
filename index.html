@@ -348,9 +348,10 @@ function vAccs(){
   let h='<h2>Счета</h2>';
   if(!S.accounts.length)return h+'<div class="empty">Счетов пока нет.<br>Создай первый — накопительный, наличные или карту.</div><button class="btn" data-act="acc-add">＋ Создать счёт</button>';
   for(const a of S.accounts){
+    const mi=round2(S.txs.reduce((s,t)=>s+(t.type==='income'&&t.acc===a.id&&t.date.slice(0,7)===curMonth()?t.amount:0),0));
     h+='<div class="card acard" data-act="acc-open" data-id="'+a.id+'"><div class="row between"><b>'+esc(a.name)+'</b><span class="badge">'+CUR[a.cur].sym+'</span></div>'+
     '<div class="big" style="margin:8px 0 6px">'+fmt(accBalance(a.id),a.cur)+'</div>'+
-    '<div class="row between"><span class="small muted">Доход за месяц: <b class="pos">+'+fmtN(monthSum('income',curMonth()))+'</b></span>'+(+a.rate>0?'<span class="badge g">'+a.rate+'% годовых</span>':'<span class="badge">без процента</span>')+'</div></div>';
+    '<div class="row between"><span class="small muted">Доход за месяц: <b class="pos">+'+fmtN(mi)+'</b></span>'+(+a.rate>0?'<span class="badge g">'+a.rate+'% годовых</span>':'<span class="badge">без процента</span>')+'</div></div>';
   }
   h+='<button class="btn gray" data-act="acc-add">＋ Добавить счёт</button>';
   return h;
@@ -376,7 +377,7 @@ function vMore(){
     '<button class="btn sm gray" data-act="exp-backup">💾 Экспорт бэкапа (JSON)</button>'+
     '<button class="btn sm gray" data-act="exp-csv">📄 Экспорт операций (CSV)</button>'+
     '<label class="btn sm gray" style="cursor:pointer">📥 Импорт бэкапа<input type="file" id="imp" accept=".json,application/json" style="display:none"></label></div>';
-  h+='<div class="sect">О приложении</div><div class="card small muted">Личный финансовый трекер. Версия 1.4. Все данные хранятся только на этом устройстве. Проценты начисляются автоматически в выбранный для каждого счёта день месяца при открытии приложения.</div>';
+  h+='<div class="sect">О приложении</div><div class="card small muted">Личный финансовый трекер. Версия 1.5. Все данные хранятся только на этом устройстве. Проценты начисляются автоматически в выбранный для каждого счёта день месяца при открытии приложения.</div>';
   return h;
 }
 
